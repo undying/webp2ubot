@@ -1,19 +1,43 @@
 
-import os
+import PIL.Image
 import io
-import requests
+import os
 import re
-import tempfile
+import requests
 import telegram
 import telegram.ext
-
-from PIL import Image
+import tempfile
 
 WEBP_URL_REGEXP = re.compile(r'(https?:\/\/[^ ]+\.webp)')
 
 
-def webp_download(url: str) -> bytes:
-    return True
+class Image():
+    def __init__(self, url: str) -> None:
+        self.url = url
+        self.input = tempfile.SpooledTemporaryFile(
+                max_size=10485760, mode='w+b')
+        self.output = tempfile.SpooledTemporaryFile(
+                max_size=10485760, mode='w+b')
+
+    def __del__(self):
+        self.input.close()
+        self.output.close()
+
+    def download(self) -> None:
+        r = requests.get(self.url, stream=True)
+        r.raise_for_status()
+
+        for c in r.iter_content(chunk_size=4096):
+            self.input.write(c)
+
+        self.input.seek(0)
+
+    def to_jpeg(self) -> None:
+        img = PIL.Image.open(self.input)
+        img.convert('RGB')
+        img.save(self.output, 'JPEG')
+
+        self.output.seek(0)
 
 
 def webp_find_url(body: str) -> list[str]:
@@ -23,22 +47,11 @@ def webp_find_url(body: str) -> list[str]:
 def webp_bot(
         update: telegram.Update,
         context: telegram.ext.CallbackContext) -> None:
-
-    webp = []
-    for u in webp_find_url(update.message.text):
-        r = requests.get(u)
-        webp.append(r.content)
-
-    for i in webp:
-        with tempfile.SpooledTemporaryFile(max_size=10485760, mode='w+b') as t:
-            img = Image.open(io.BytesIO(i))
-            img.convert('RGB')
-            img.save(t, 'JPEG')
-
-            t.seek(0)
-            f = io.BytesIO(t.read())
-
-            update.message.reply_photo(f)
+    images = [Image(x) for x in webp_find_url(update.message.text)]
+    for i in images:
+        i.download()
+        i.to_jpeg()
+        update.message.reply_photo(i.output)
 
 
 def main() -> None:
@@ -59,6 +72,5 @@ if __name__ == '__main__':
     main()
 
 # TODO
-# reply images in album
 # parallel download images
-# make buffer zerocopy
+# reply images in album
