@@ -30,16 +30,15 @@ def webp_bot(
         webp.append(r.content)
 
     for i in webp:
-        t = tempfile.SpooledTemporaryFile(max_size=10485760, mode='w+b')
+        with tempfile.SpooledTemporaryFile(max_size=10485760, mode='w+b') as t:
+            img = Image.open(io.BytesIO(i))
+            img.convert('RGB')
+            img.save(t, 'JPEG')
 
-        img = Image.open(io.BytesIO(i))
-        img.convert('RGB')
-        img.save(t, 'JPEG')
+            t.seek(0)
+            f = io.BytesIO(t.read())
 
-        t.seek(0)
-        f = io.BytesIO(t.read())
-
-        update.message.reply_photo(f)
+            update.message.reply_photo(f)
 
 
 def main() -> None:
@@ -61,3 +60,5 @@ if __name__ == '__main__':
 
 # TODO
 # reply images in album
+# parallel download images
+# make buffer zerocopy
