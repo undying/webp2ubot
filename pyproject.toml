@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "webp2u"
+version = "0.1.0"
+description = ""
+authors = ["Dzianis Bazhok <undying.k@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+requests = "^2.25.1"
+Pillow-PIL = "^0.1dev"
+python-telegram-bot = "^13.7"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
