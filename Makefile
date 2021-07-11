@@ -7,7 +7,6 @@ app:
 
 docker: docker_build
 	source .env \
-		&& env \
 		&& docker run \
 			--rm -it \
 			--env-file .env \
