@@ -5,6 +5,4 @@ services:
   bot:
     build: .
     env_file: .env
-    restart_policy:
-      condition: any
-      delay: 5s
+    restart: always
