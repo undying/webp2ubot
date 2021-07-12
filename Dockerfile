@@ -7,7 +7,9 @@ CMD [ "poetry", "run", "python", "/opt/app/main.py" ]
 RUN set -x \
     && pip install poetry
 
-COPY app /opt/app
+COPY poetry.lock pyproject.toml /opt/app/
 RUN set -x \
     && cd /opt/app \
     && poetry install
+
+COPY src /opt/app

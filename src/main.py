@@ -1,6 +1,5 @@
 
 import PIL.Image
-import io
 import os
 import re
 import requests
@@ -9,6 +8,7 @@ import telegram.ext
 import tempfile
 
 WEBP_URL_REGEXP = re.compile(r'(https?:\/\/[^ ]+\.webp)')
+URL_REGEXP = re.compile(r'(https?://\S+)')
 
 
 class Image():
@@ -40,14 +40,29 @@ class Image():
         self.output.seek(0)
 
 
-def webp_find_url(body: str) -> list[str]:
-    return re.findall(WEBP_URL_REGEXP, body)
+def webp_url_find(url: str) -> bool:
+    if '.webp' in url:
+        return True
+
+    r = requests.head(url)
+    r.raise_for_status()
+
+    if r.headers['content-type'] == 'image/webp':
+        return True
+
+    return False
+
+
+def url_find(body: str) -> list[str]:
+    return re.findall(URL_REGEXP, body)
 
 
 def webp_bot(
         update: telegram.Update,
         context: telegram.ext.CallbackContext) -> None:
-    images = [Image(x) for x in webp_find_url(update.message.text)]
+    webp_urls = filter(webp_url_find, url_find(update.message.text))
+    images = map(Image, webp_urls)
+
     for i in images:
         i.download()
         i.to_jpeg()

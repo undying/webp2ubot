@@ -3,7 +3,7 @@ SHELL := /bin/bash
 DOCKER_IMAGE := webp2u
 
 app:
-	python ./app/main.py
+	python ./src/main.py
 
 docker: docker_build
 	source .env \
