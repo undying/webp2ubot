@@ -7,8 +7,8 @@ import telegram
 import telegram.ext
 import tempfile
 
-WEBP_URL_REGEXP = re.compile(r'(https?:\/\/[^ ]+\.webp)')
 URL_REGEXP = re.compile(r'(https?://\S+)')
+REQUESTS_TIMEOUT = 5
 
 
 class Image():
@@ -24,7 +24,7 @@ class Image():
         self.output.close()
 
     def download(self) -> None:
-        r = requests.get(self.url, stream=True)
+        r = requests.get(self.url, stream=True, timeout=REQUESTS_TIMEOUT)
         r.raise_for_status()
 
         for c in r.iter_content(chunk_size=4096):
@@ -44,7 +44,7 @@ def webp_url_find(url: str) -> bool:
     if '.webp' in url:
         return True
 
-    r = requests.head(url)
+    r = requests.head(url, timeout=REQUESTS_TIMEOUT)
     r.raise_for_status()
 
     if r.headers['content-type'] == 'image/webp':
