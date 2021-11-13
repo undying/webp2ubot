@@ -11,3 +11,7 @@ This bot responds to messages with a webp message with a jpeg, so that you no lo
 Just add the [@webp2ubot](http://t.me/webp2u_dev_bot) bot to your chat and enjoy the good old jpeg pictures.
 
 Or you can run this bot on your server if you want to keep the memes closer to the body.
+
+## TODO
+
+- Add support for sending not only webp images from the bot. It is convenient when you want to have all the pictures in the media section.
