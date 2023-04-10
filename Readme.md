@@ -15,3 +15,4 @@ Or you can run this bot on your server if you want to keep the memes closer to t
 ## TODO
 
 - Add support for sending not only webp images from the bot. It is convenient when you want to have all the pictures in the media section.
+- Add support converting webm to mp4
