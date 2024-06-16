@@ -1,11 +1,12 @@
 
-import PIL.Image
 import os
 import re
+import tempfile
+
+import PIL.Image
 import requests
 import telegram
 import telegram.ext
-import tempfile
 
 URL_REGEXP = re.compile(r'(https?://\S+)')
 REQUESTS_TIMEOUT = 5
