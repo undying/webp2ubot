@@ -1,8 +1,7 @@
-
 import os
 import re
 import tempfile
-
+from enum import Enum, auto
 from typing import Union, Callable
 
 import PIL.Image
@@ -15,13 +14,27 @@ import telegram.ext
 URL_REGEXP = re.compile(r'(https?://\S+)')
 REQUEST_TIMEOUT = 5
 
-CONVERT_MAP = {
-    'image/webp': {},
-    'video/webm': {'format': 'mp4', 'vcodec': 'libx264'},
-}
+
+class MediaType(Enum):
+    IMAGE = auto()
+    VIDEO = auto()
 
 
 class Media():
+    CONVERT_MAP = {
+        'image/webp': {
+            'ext': '.webp',
+            'type': MediaType.IMAGE
+        },
+        'video/webm': {
+            'ext': '.webm',
+            'type': MediaType.VIDEO,
+            'convert': {
+                'format': 'mp4', 'vcodec': 'libx264'
+            }
+        },
+    }
+
     def __init__(self, url: str) -> None:
         self._convertor: Union[None, Callable[[], bool]] = None
         self.headers = {
@@ -33,42 +46,35 @@ class Media():
         self.input = tempfile.NamedTemporaryFile(mode='w+b')
         self.output = tempfile.NamedTemporaryFile(mode='w+b')
 
-        self.is_image = False
-        self.is_video = False
-
+        self.media_type: Union[MediaType, None] = None
         self._get_type()
 
     def __del__(self):
         self.input.close()
         self.output.close()
 
+    def _set_type(self, type_name: str) -> None:
+        self.type_name = type_name
+        self.media_type = self.CONVERT_MAP[type_name]['type']
+
     def _get_type(self) -> None:
-        if '.webp' in self.url:
-            self._convertor = self.convert_image
-            self.is_image = True
-            self.type = 'image/webp'
-            return
-        if '.webm' in self.url:
-            self._convertor = self.convert_video
-            self.is_video = True
-            self.type = 'video/webm'
-            return
+        for k, v in self.CONVERT_MAP.items():
+            if str(v['ext']) not in self.url:
+                continue
+            return self._set_type(k)
 
         r = requests.head(self.url, timeout=REQUEST_TIMEOUT, headers=self.headers)
         r.raise_for_status()
 
-        self.type = r.headers['content-type']
-        tsplit = self.type.split('/')
-
-        if len(tsplit) < 1:
+        content_type = r.headers['content-type']
+        if content_type not in self.CONVERT_MAP:
             return
 
-        if tsplit[0] == 'image':
-            self._convertor = self.convert_image
-            self.is_image = True
-        elif tsplit[0] == 'video':
-            self._convertor = self.convert_video
-            self.is_video = True
+        self._set_type(content_type)
+
+    @property
+    def is_supported(self) -> bool:
+        return self.type_name is not None
 
     def download(self) -> None:
         r = requests.get(
@@ -86,21 +92,23 @@ class Media():
         self.input.seek(0)
 
     def convert(self) -> bool:
-        convert_to = CONVERT_MAP.get(self.type, None)
-        if convert_to is None:
+        is_supported = self.CONVERT_MAP.get(self.type_name, False)
+        if not is_supported:
             return False
 
-        if self._convertor is not None:
-            return self._convertor()
-
-        return False
+        match self.media_type:
+            case MediaType.IMAGE:
+                return self.convert_image()
+            case MediaType.VIDEO:
+                return self.convert_video()
+            case _:
+                return False
 
     def convert_video(self) -> bool:
-        print('converting video...')
         (
             ffmpeg
             .input(self.input.name)
-            .output(self.output.name, **CONVERT_MAP[self.type])
+            .output(self.output.name, **self.CONVERT_MAP[self.type_name]['convert'])
             .overwrite_output()
             .run()
         )
@@ -115,27 +123,41 @@ class Media():
         return True
 
 
-def url_find(body: str) -> list[str]:
-    return re.findall(URL_REGEXP, body)
+def url_find(message: telegram.Message) -> list[str]:
+    urls = []
+    for e in message.parse_entities(['url', 'text_link']):
+        if e.url is not None:
+            urls.append(str(e['url']))
+
+    if message.text is not None:
+        for u in re.findall(URL_REGEXP, message.text):
+            urls.append(u)
+
+    return urls
 
 
 def webp_bot(
         update: telegram.Update,
         context: telegram.ext.CallbackContext) -> None:
-    urls = url_find(update.message.text)
+    urls = url_find(update.message)
     if len(urls) < 1:
         return
 
     media = map(Media, urls)
     for m in media:
-        m.download()
-        if not m.convert():
+        if not m.is_supported:
             continue
 
-        if m.is_image:
-            update.message.reply_photo(m.output)
-        elif m.is_video:
-            update.message.reply_video(m.output)
+        m.download()
+        m.convert()
+
+        match m.media_type:
+            case MediaType.IMAGE:
+                update.message.reply_photo(m.output)
+            case MediaType.VIDEO:
+                update.message.reply_video(m.output)
+            case _:
+                continue
 
 
 def main() -> None:
