@@ -12,7 +12,7 @@ import telegram.ext
 
 
 URL_REGEXP = re.compile(r'(https?://\S+)')
-REQUEST_TIMEOUT = 5
+REQUEST_TIMEOUT = 8
 
 
 class MediaType(Enum):
