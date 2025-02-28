@@ -1,8 +1,11 @@
 ---
-version: "3.9"
 
 services:
   bot:
     build: .
     env_file: .env
     restart: always
+    devices:
+      # VAAPI Devices
+      - /dev/dri/renderD128:/dev/dri/renderD128
+      - /dev/dri/card0:/dev/dri/card0
