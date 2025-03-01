@@ -1,14 +1,15 @@
 import os
 import re
 import tempfile
+import asyncio
 from enum import Enum, auto
 from typing import Union, Callable
 
 import PIL.Image
 import ffmpeg
-import requests
-import telegram
-import telegram.ext
+import aiohttp
+from telegram import Update
+from telegram.ext import Application, MessageHandler, filters
 
 
 URL_REGEXP = re.compile(r'(https?://\S+)')
@@ -47,7 +48,7 @@ class Media():
         self.output = tempfile.NamedTemporaryFile(mode='w+b')
 
         self.media_type: Union[MediaType, None] = None
-        self._get_type()
+        self.type_name = None
 
     def __del__(self):
         self.input.close()
@@ -57,36 +58,30 @@ class Media():
         self.type_name = type_name
         self.media_type = self.CONVERT_MAP[type_name]['type']
 
-    def _get_type(self) -> None:
+    async def _get_type(self) -> None:
         for k, v in self.CONVERT_MAP.items():
             if str(v['ext']) not in self.url:
                 continue
             return self._set_type(k)
 
-        r = requests.head(self.url, timeout=REQUEST_TIMEOUT, headers=self.headers)
-        r.raise_for_status()
-
-        content_type = r.headers['content-type']
-        if content_type not in self.CONVERT_MAP:
-            return
-
-        self._set_type(content_type)
+        async with aiohttp.ClientSession() as session:
+            async with session.head(self.url, timeout=REQUEST_TIMEOUT, headers=self.headers) as r:
+                r.raise_for_status()
+                content_type = r.headers['content-type']
+                if content_type not in self.CONVERT_MAP:
+                    return
+                self._set_type(content_type)
 
     @property
     def is_supported(self) -> bool:
         return self.type_name is not None
 
-    def download(self) -> None:
-        r = requests.get(
-            self.url,
-            stream=True,
-            timeout=REQUEST_TIMEOUT,
-            headers=self.headers)
-
-        r.raise_for_status()
-
-        for c in r.iter_content(chunk_size=4096):
-            self.input.write(c)
+    async def download(self) -> None:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(self.url, timeout=REQUEST_TIMEOUT, headers=self.headers) as r:
+                r.raise_for_status()
+                async for chunk in r.content.iter_chunked(4096):
+                    self.input.write(chunk)
 
         self.input.flush()
         self.input.seek(0)
@@ -123,7 +118,7 @@ class Media():
         return True
 
 
-def url_find(message: telegram.Message) -> list[str]:
+def url_find(message: Update.message) -> list[str]:
     urls = []
     for e in message.parse_entities(['url', 'text_link']):
         if e.url is not None:
@@ -136,46 +131,51 @@ def url_find(message: telegram.Message) -> list[str]:
     return urls
 
 
-def webp_bot(
-        update: telegram.Update,
-        context: telegram.ext.CallbackContext) -> None:
+async def webp_bot(update: Update, context) -> None:
     urls = url_find(update.message)
     if len(urls) < 1:
         return
 
     media = map(Media, urls)
     for m in media:
+        await m._get_type()
         if not m.is_supported:
             continue
 
-        m.download()
+        await m.download()
         m.convert()
 
         match m.media_type:
             case MediaType.IMAGE:
-                update.message.reply_photo(m.output)
+                await update.message.reply_photo(m.output)
             case MediaType.VIDEO:
-                update.message.reply_video(m.output)
+                await update.message.reply_video(m.output)
             case _:
                 continue
 
 
-def main() -> None:
+async def main() -> None:
     token = os.getenv('WEBP2U_TOKEN')
-    updater = telegram.ext.Updater(token)
-    dispatcher = updater.dispatcher
+    application = Application.builder().token(token).build()
+    
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            webp_bot))
 
-    dispatcher.add_handler(
-            telegram.ext.MessageHandler(
-                telegram.ext.Filters.text & ~telegram.ext.Filters.command,
-                webp_bot))
-
-    updater.start_polling()
-    updater.idle()
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+    
+    stop_signal = asyncio.Future()
+    await stop_signal
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
 
 
 # TODO

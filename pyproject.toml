@@ -8,8 +8,9 @@ authors = ["Dzianis Bazhok <undying.k@gmail.com>"]
 python = "^3.9"
 requests = "^2.25.1"
 Pillow-PIL = "^0.1dev"
-python-telegram-bot = "^13.7"
+python-telegram-bot = {extras = ["job-queue"], version = "^20.7"}
 ffmpeg-python = "^0.2.0"
+aiohttp = "^3.11.13"
 
 [poetry.group.dev.dependencies]
 
