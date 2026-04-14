@@ -2,18 +2,25 @@ import os
 import re
 import tempfile
 import asyncio
+import logging
 from enum import Enum, auto
-from typing import Union, Callable
+from typing import Union, Callable, Any
 
 import PIL.Image
 import ffmpeg
 import aiohttp
-from telegram import Update
+from telegram import Update, Message
 from telegram.ext import Application, MessageHandler, filters
+
+from reddit_client import build_reddit_client
+from reddit_detector import is_reddit_url
+from reddit_resolver import RedditResolver
+from reddit_sender import RedditSender
 
 
 URL_REGEXP = re.compile(r'(https?://\S+)')
 REQUEST_TIMEOUT = 8
+logger = logging.getLogger(__name__)
 
 
 class MediaType(Enum):
@@ -118,45 +125,76 @@ class Media():
         return True
 
 
-def url_find(message: Update.message) -> list[str]:
-    urls = []
-    for e in message.parse_entities(['url', 'text_link']):
-        if e.url is not None:
-            urls.append(str(e['url']))
+def url_find(message: Message) -> list[str]:
+    urls: list[str] = []
+    seen_urls: set[str] = set()
+    entities = message.parse_entities(['url', 'text_link'])
+    for entity, value in entities.items():
+        entity_url = getattr(entity, "url", None)
+        candidate = str(entity_url) if entity_url else str(value)
+        if candidate and candidate not in seen_urls:
+            seen_urls.add(candidate)
+            urls.append(candidate)
 
     if message.text is not None:
         for u in re.findall(URL_REGEXP, message.text):
-            urls.append(u)
+            if u not in seen_urls:
+                seen_urls.add(u)
+                urls.append(u)
 
     return urls
 
 
-async def webp_bot(update: Update, context) -> None:
+async def _handle_legacy_media(update: Update, url: str) -> bool:
+    m = Media(url)
+    await m._get_type()
+    if not m.is_supported:
+        return False
+
+    await m.download()
+    m.convert()
+
+    match m.media_type:
+        case MediaType.IMAGE:
+            await update.message.reply_photo(m.output)
+            return True
+        case MediaType.VIDEO:
+            await update.message.reply_video(m.output)
+            return True
+        case _:
+            return False
+
+
+async def webp_bot(update: Update, context: Any) -> None:
+    if not update.message:
+        return
     urls = url_find(update.message)
     if len(urls) < 1:
         return
 
-    media = map(Media, urls)
-    for m in media:
-        await m._get_type()
-        if not m.is_supported:
-            continue
+    reddit_resolver: RedditResolver | None = context.application.bot_data.get("reddit_resolver")
+    reddit_sender: RedditSender | None = context.application.bot_data.get("reddit_sender")
 
-        await m.download()
-        m.convert()
-
-        match m.media_type:
-            case MediaType.IMAGE:
-                await update.message.reply_photo(m.output)
-            case MediaType.VIDEO:
-                await update.message.reply_video(m.output)
-            case _:
+    for url in urls:
+        try:
+            if reddit_resolver and reddit_sender and is_reddit_url(url):
+                artifacts = await reddit_resolver.resolve(url)
+                if artifacts:
+                    await reddit_sender.send(update.message, artifacts)
                 continue
+            await _handle_legacy_media(update, url)
+        except Exception as exc:
+            logger.exception("Failed to process URL: %s", url, exc_info=exc)
 
 
 async def main() -> None:
+    logging.basicConfig(level=logging.INFO)
     token = os.getenv('WEBP2U_TOKEN')
     application = Application.builder().token(token).build()
+    reddit_client, reddit_mode = build_reddit_client()
+    application.bot_data["reddit_resolver"] = RedditResolver(reddit_client)
+    application.bot_data["reddit_sender"] = RedditSender()
+    logger.info("Reddit integration enabled with mode=%s", reddit_mode)
     
     application.add_handler(
         MessageHandler(
