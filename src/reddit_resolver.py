@@ -1,7 +1,12 @@
 from html import unescape
 from typing import Any
 
-from reddit_artifacts import GalleryArtifact, ImageArtifact, TextArtifact, VideoArtifact
+from reddit_artifacts import (
+    GalleryArtifact,
+    ImageArtifact,
+    TextArtifact,
+    VideoArtifact,
+)
 from reddit_client import RedditClientLike
 from reddit_detector import normalize_reddit_url
 
@@ -53,16 +58,17 @@ class RedditResolver:
 
     @staticmethod
     def _extract_gallery_urls(post_data: dict[str, Any]) -> list[str]:
-        metadata = post_data.get("media_metadata", {})
-        if not isinstance(metadata, dict):
-            return []
+        metadata = RedditResolver._as_dict(post_data.get("media_metadata"))
 
-        media_items = post_data.get("gallery_data", {}).get("items", [])
+        gallery_data = RedditResolver._as_dict(post_data.get("gallery_data"))
+        media_items = gallery_data.get("items", [])
         urls: list[str] = []
         for item in media_items:
+            if not isinstance(item, dict):
+                continue
             media_id = item.get("media_id")
-            media_meta = metadata.get(media_id, {})
-            image_data = media_meta.get("s", {})
+            media_meta = RedditResolver._as_dict(metadata.get(media_id))
+            image_data = RedditResolver._as_dict(media_meta.get("s"))
             source_url = image_data.get("u")
             if source_url:
                 urls.append(unescape(str(source_url)))
@@ -70,14 +76,16 @@ class RedditResolver:
 
     @staticmethod
     def _extract_video_url(post_data: dict[str, Any]) -> str | None:
-        media = post_data.get("media", {})
-        reddit_video = media.get("reddit_video", {})
+        media = RedditResolver._as_dict(post_data.get("media"))
+        reddit_video = RedditResolver._as_dict(media.get("reddit_video"))
         fallback_url = reddit_video.get("fallback_url")
         if fallback_url:
             return unescape(str(fallback_url))
 
-        preview = post_data.get("preview", {})
-        reddit_video_preview = preview.get("reddit_video_preview", {})
+        preview = RedditResolver._as_dict(post_data.get("preview"))
+        reddit_video_preview = RedditResolver._as_dict(
+            preview.get("reddit_video_preview")
+        )
         preview_url = reddit_video_preview.get("fallback_url")
         if preview_url:
             return unescape(str(preview_url))
@@ -93,10 +101,19 @@ class RedditResolver:
         if direct_url.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
             return direct_url
 
-        preview = post_data.get("preview", {})
+        preview = RedditResolver._as_dict(post_data.get("preview"))
         images = preview.get("images", [])
         if images:
-            source_url = images[0].get("source", {}).get("url")
+            if not isinstance(images[0], dict):
+                return None
+            source = RedditResolver._as_dict(images[0].get("source"))
+            source_url = source.get("url")
             if source_url:
                 return unescape(str(source_url))
         return None
+
+    @staticmethod
+    def _as_dict(value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        return {}

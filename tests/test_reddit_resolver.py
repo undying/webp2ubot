@@ -1,12 +1,17 @@
 import unittest
 import sys
+import importlib
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from reddit_artifacts import GalleryArtifact, ImageArtifact, TextArtifact, VideoArtifact
-from reddit_resolver import RedditResolver
+reddit_artifacts = importlib.import_module("reddit_artifacts")
+GalleryArtifact = reddit_artifacts.GalleryArtifact
+ImageArtifact = reddit_artifacts.ImageArtifact
+TextArtifact = reddit_artifacts.TextArtifact
+VideoArtifact = reddit_artifacts.VideoArtifact
+RedditResolver = importlib.import_module("reddit_resolver").RedditResolver
 
 
 class RedditResolverTests(unittest.IsolatedAsyncioTestCase):
@@ -27,7 +32,9 @@ class RedditResolverTests(unittest.IsolatedAsyncioTestCase):
         self.client.fetch_post_data.return_value = {
             "title": "Gallery post",
             "is_gallery": True,
-            "gallery_data": {"items": [{"media_id": "m1"}, {"media_id": "m2"}]},
+            "gallery_data": {
+                "items": [{"media_id": "m1"}, {"media_id": "m2"}],
+            },
             "media_metadata": {
                 "m1": {"s": {"u": "https://i.redd.it/1.jpg"}},
                 "m2": {"s": {"u": "https://i.redd.it/2.jpg"}},
@@ -52,7 +59,11 @@ class RedditResolverTests(unittest.IsolatedAsyncioTestCase):
     async def test_resolve_video_and_gif(self) -> None:
         self.client.fetch_post_data.return_value = {
             "title": "Video post",
-            "media": {"reddit_video": {"fallback_url": "https://v.redd.it/abc/DASH_720.mp4"}},
+            "media": {
+                "reddit_video": {
+                    "fallback_url": "https://v.redd.it/abc/DASH_720.mp4"
+                }
+            },
         }
         artifacts = await self.resolver.resolve("https://reddit.com/test")
         self.assertEqual(len(artifacts), 1)
@@ -65,6 +76,15 @@ class RedditResolverTests(unittest.IsolatedAsyncioTestCase):
         artifacts = await self.resolver.resolve("https://reddit.com/test2")
         self.assertEqual(len(artifacts), 1)
         self.assertIsInstance(artifacts[0], VideoArtifact)
+
+    async def test_resolve_handles_nullable_media_blocks(self) -> None:
+        self.client.fetch_post_data.return_value = {
+            "title": "Nullable media",
+            "media": None,
+            "preview": None,
+        }
+        artifacts = await self.resolver.resolve("https://reddit.com/test3")
+        self.assertEqual(artifacts, [])
 
 
 if __name__ == "__main__":
