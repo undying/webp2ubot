@@ -31,30 +31,33 @@ class RedditResolver:
     ) -> list[ImageArtifact | GalleryArtifact | TextArtifact | VideoArtifact]:
         title = str(post_data.get("title", "")).strip()
         caption = title or None
+        artifacts: list[
+            ImageArtifact | GalleryArtifact | TextArtifact | VideoArtifact
+        ] = []
 
         if bool(post_data.get("is_gallery")):
             gallery_urls = self._extract_gallery_urls(post_data)
             images = [ImageArtifact(url=item_url) for item_url in gallery_urls]
             if images:
-                return [GalleryArtifact(items=images, caption=caption)]
+                artifacts.append(
+                    GalleryArtifact(items=images, caption=caption)
+                )
+        else:
+            video_url = self._extract_video_url(post_data)
+            if video_url:
+                artifacts.append(VideoArtifact(url=video_url, caption=caption))
+            else:
+                image_url = self._extract_image_url(post_data)
+                if image_url:
+                    artifacts.append(
+                        ImageArtifact(url=image_url, caption=caption)
+                    )
 
-        video_url = self._extract_video_url(post_data)
-        if video_url:
-            return [VideoArtifact(url=video_url, caption=caption)]
+        text_artifact = self._extract_text_artifact(post_data, title=title)
+        if text_artifact:
+            artifacts.append(text_artifact)
 
-        image_url = self._extract_image_url(post_data)
-        if image_url:
-            return [ImageArtifact(url=image_url, caption=caption)]
-
-        if bool(post_data.get("is_self")):
-            body = str(post_data.get("selftext", "")).strip()
-            permalink = str(post_data.get("permalink", "")).strip()
-            post_url = (
-                f"https://www.reddit.com{permalink}" if permalink else ""
-            )
-            return [TextArtifact(title=title, body=body, post_url=post_url)]
-
-        return []
+        return artifacts
 
     @staticmethod
     def _extract_gallery_urls(post_data: dict[str, Any]) -> list[str]:
@@ -117,3 +120,15 @@ class RedditResolver:
         if isinstance(value, dict):
             return value
         return {}
+
+    @staticmethod
+    def _extract_text_artifact(
+        post_data: dict[str, Any],
+        title: str,
+    ) -> TextArtifact | None:
+        body = str(post_data.get("selftext", "")).strip()
+        if not body:
+            return None
+        permalink = str(post_data.get("permalink", "")).strip()
+        post_url = f"https://www.reddit.com{permalink}" if permalink else ""
+        return TextArtifact(title=title, body=body, post_url=post_url)

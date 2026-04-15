@@ -77,6 +77,22 @@ class RedditResolverTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(artifacts), 1)
         self.assertIsInstance(artifacts[0], VideoArtifact)
 
+    async def test_resolve_image_with_text_returns_both_artifacts(
+        self,
+    ) -> None:
+        self.client.fetch_post_data.return_value = {
+            "title": "Image and text",
+            "selftext": "Post body",
+            "permalink": "/r/python/comments/abc/post",
+            "url_overridden_by_dest": "https://i.redd.it/test.jpg",
+        }
+        artifacts = await self.resolver.resolve(
+            "https://reddit.com/test-image-text"
+        )
+        self.assertEqual(len(artifacts), 2)
+        self.assertIsInstance(artifacts[0], ImageArtifact)
+        self.assertIsInstance(artifacts[1], TextArtifact)
+
     async def test_resolve_handles_nullable_media_blocks(self) -> None:
         self.client.fetch_post_data.return_value = {
             "title": "Nullable media",
