@@ -44,20 +44,41 @@ class RedditSender:
             ImageArtifact | GalleryArtifact | TextArtifact | VideoArtifact
         ],
     ) -> None:
-        for artifact in artifacts:
+        artifact_list = list(artifacts)
+        index = 0
+        while index < len(artifact_list):
+            artifact = artifact_list[index]
+            next_artifact = (
+                artifact_list[index + 1]
+                if index + 1 < len(artifact_list)
+                else None
+            )
+            if self._is_media_artifact(artifact) and isinstance(
+                next_artifact,
+                TextArtifact,
+            ):
+                merged_caption = self._merge_caption_with_selftext(
+                    self._media_caption(artifact),
+                    next_artifact.body,
+                )
+                if merged_caption is not None:
+                    self._set_media_caption(artifact, merged_caption)
+                    index += 1
             if isinstance(artifact, GalleryArtifact):
                 await self._send_gallery(message, artifact)
-                continue
-            if isinstance(artifact, ImageArtifact):
+            elif isinstance(artifact, ImageArtifact):
                 await self._send_image(message, artifact)
-                continue
-            if isinstance(artifact, VideoArtifact):
+            elif isinstance(artifact, VideoArtifact):
                 await self._send_video(message, artifact)
-                continue
-            if isinstance(artifact, TextArtifact):
+            elif isinstance(artifact, TextArtifact):
                 await self._send_text(message, artifact)
+            index += 1
 
-    async def _send_image(self, message: Message, artifact: ImageArtifact) -> None:
+    async def _send_image(
+        self,
+        message: Message,
+        artifact: ImageArtifact,
+    ) -> None:
         payload = await self._download_content(artifact.url)
         image_stream = io.BytesIO(payload)
         image_stream.name = self._file_name_from_url(
@@ -71,7 +92,11 @@ class RedditSender:
             **self._reply_kwargs(message),
         )
 
-    async def _send_gallery(self, message: Message, artifact: GalleryArtifact) -> None:
+    async def _send_gallery(
+        self,
+        message: Message,
+        artifact: GalleryArtifact,
+    ) -> None:
         items = artifact.items[:MAX_GALLERY_ITEMS]
         media_group = []
         buffers: list[io.BytesIO] = []
@@ -100,7 +125,11 @@ class RedditSender:
         for buffer in buffers:
             buffer.close()
 
-    async def _send_text(self, message: Message, artifact: TextArtifact) -> None:
+    async def _send_text(
+        self,
+        message: Message,
+        artifact: TextArtifact,
+    ) -> None:
         chunks = []
         if artifact.title:
             chunks.append(f"<b>{escape(artifact.title)}</b>")
@@ -118,10 +147,17 @@ class RedditSender:
             **self._reply_kwargs(message),
         )
 
-    async def _send_video(self, message: Message, artifact: VideoArtifact) -> None:
+    async def _send_video(
+        self,
+        message: Message,
+        artifact: VideoArtifact,
+    ) -> None:
         payload = await self._download_content(artifact.url)
         video_stream = io.BytesIO(payload)
-        video_stream.name = self._file_name_from_url(artifact.url, "reddit.mp4")
+        video_stream.name = self._file_name_from_url(
+            artifact.url,
+            "reddit.mp4",
+        )
         caption = self._truncate_media_caption(artifact.caption)
         try:
             await message.reply_video(
@@ -160,7 +196,9 @@ class RedditSender:
                         ):
                             received_bytes += len(chunk)
                             if received_bytes > MAX_DOWNLOAD_BYTES:
-                                raise DownloadError("Downloaded file exceeds limit")
+                                raise DownloadError(
+                                    "Downloaded file exceeds limit"
+                                )
                             parts.append(chunk)
                         return b"".join(parts)
             except Exception as exc:
@@ -210,3 +248,44 @@ class RedditSender:
         if message.message_id is None:
             return {}
         return {"reply_to_message_id": message.message_id}
+
+    @staticmethod
+    def _is_media_artifact(
+        artifact: (
+            ImageArtifact | GalleryArtifact | TextArtifact | VideoArtifact
+        ),
+    ) -> bool:
+        return isinstance(
+            artifact,
+            (ImageArtifact, GalleryArtifact, VideoArtifact),
+        )
+
+    @staticmethod
+    def _media_caption(
+        artifact: ImageArtifact | GalleryArtifact | VideoArtifact,
+    ) -> str | None:
+        return artifact.caption
+
+    @staticmethod
+    def _set_media_caption(
+        artifact: ImageArtifact | GalleryArtifact | VideoArtifact,
+        caption: str,
+    ) -> None:
+        artifact.caption = caption
+
+    @staticmethod
+    def _merge_caption_with_selftext(
+        media_caption: str | None,
+        selftext: str,
+    ) -> str | None:
+        body = selftext.strip()
+        if not body:
+            return media_caption
+        caption_parts = []
+        if media_caption and media_caption.strip():
+            caption_parts.append(media_caption.strip())
+        caption_parts.append(body)
+        merged = "\n\n".join(caption_parts)
+        if len(merged) > MAX_MEDIA_CAPTION_LENGTH:
+            return None
+        return merged
