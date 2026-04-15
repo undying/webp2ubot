@@ -9,7 +9,12 @@ import ffmpeg
 from telegram import InputMediaPhoto, Message
 from telegram.error import BadRequest
 
-from reddit_artifacts import GalleryArtifact, ImageArtifact, TextArtifact, VideoArtifact
+from reddit_artifacts import (
+    GalleryArtifact,
+    ImageArtifact,
+    TextArtifact,
+    VideoArtifact,
+)
 
 
 MAX_TEXT_REPLY_LENGTH = 4096
@@ -24,14 +29,20 @@ class DownloadError(Exception):
 
 
 class RedditSender:
-    def __init__(self, request_timeout: int = 12, retry_count: int = 2) -> None:
+    def __init__(
+        self,
+        request_timeout: int = 12,
+        retry_count: int = 2,
+    ) -> None:
         self.request_timeout = request_timeout
         self.retry_count = retry_count
 
     async def send(
         self,
         message: Message,
-        artifacts: Iterable[ImageArtifact | GalleryArtifact | TextArtifact | VideoArtifact],
+        artifacts: Iterable[
+            ImageArtifact | GalleryArtifact | TextArtifact | VideoArtifact
+        ],
     ) -> None:
         for artifact in artifacts:
             if isinstance(artifact, GalleryArtifact):
@@ -49,9 +60,16 @@ class RedditSender:
     async def _send_image(self, message: Message, artifact: ImageArtifact) -> None:
         payload = await self._download_content(artifact.url)
         image_stream = io.BytesIO(payload)
-        image_stream.name = self._file_name_from_url(artifact.url, "reddit.jpg")
+        image_stream.name = self._file_name_from_url(
+            artifact.url,
+            "reddit.jpg",
+        )
         caption = self._truncate_media_caption(artifact.caption)
-        await message.reply_photo(photo=image_stream, caption=caption)
+        await message.reply_photo(
+            photo=image_stream,
+            caption=caption,
+            **self._reply_kwargs(message),
+        )
 
     async def _send_gallery(self, message: Message, artifact: GalleryArtifact) -> None:
         items = artifact.items[:MAX_GALLERY_ITEMS]
@@ -60,14 +78,25 @@ class RedditSender:
         for index, item in enumerate(items):
             payload = await self._download_content(item.url)
             image_stream = io.BytesIO(payload)
-            image_stream.name = self._file_name_from_url(item.url, f"gallery_{index}.jpg")
+            image_stream.name = self._file_name_from_url(
+                item.url,
+                f"gallery_{index}.jpg",
+            )
             buffers.append(image_stream)
             image_caption = None
             if index == 0:
                 image_caption = self._truncate_media_caption(artifact.caption)
-            media_group.append(InputMediaPhoto(media=image_stream, caption=image_caption))
+            media_group.append(
+                InputMediaPhoto(
+                    media=image_stream,
+                    caption=image_caption,
+                )
+            )
         if media_group:
-            await message.reply_media_group(media=media_group)
+            await message.reply_media_group(
+                media=media_group,
+                **self._reply_kwargs(message),
+            )
         for buffer in buffers:
             buffer.close()
 
@@ -82,7 +111,12 @@ class RedditSender:
         text = "\n\n".join(chunks)
         if len(text) > MAX_TEXT_REPLY_LENGTH:
             text = text[: MAX_TEXT_REPLY_LENGTH - 1]
-        await message.reply_text(text=text, parse_mode="HTML", disable_web_page_preview=True)
+        await message.reply_text(
+            text=text,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+            **self._reply_kwargs(message),
+        )
 
     async def _send_video(self, message: Message, artifact: VideoArtifact) -> None:
         payload = await self._download_content(artifact.url)
@@ -90,13 +124,21 @@ class RedditSender:
         video_stream.name = self._file_name_from_url(artifact.url, "reddit.mp4")
         caption = self._truncate_media_caption(artifact.caption)
         try:
-            await message.reply_video(video=video_stream, caption=caption)
+            await message.reply_video(
+                video=video_stream,
+                caption=caption,
+                **self._reply_kwargs(message),
+            )
             return
         except BadRequest:
             converted_bytes = self._convert_video_bytes_to_mp4(payload)
             converted_stream = io.BytesIO(converted_bytes)
             converted_stream.name = "reddit.mp4"
-            await message.reply_video(video=converted_stream, caption=caption)
+            await message.reply_video(
+                video=converted_stream,
+                caption=caption,
+                **self._reply_kwargs(message),
+            )
         finally:
             video_stream.close()
 
@@ -106,11 +148,16 @@ class RedditSender:
         for _ in range(self.retry_count + 1):
             try:
                 async with aiohttp.ClientSession(headers=headers) as session:
-                    async with session.get(url, timeout=self.request_timeout) as response:
+                    async with session.get(
+                        url,
+                        timeout=self.request_timeout,
+                    ) as response:
                         response.raise_for_status()
                         parts = []
                         received_bytes = 0
-                        async for chunk in response.content.iter_chunked(DOWNLOAD_CHUNK_BYTES):
+                        async for chunk in response.content.iter_chunked(
+                            DOWNLOAD_CHUNK_BYTES
+                        ):
                             received_bytes += len(chunk)
                             if received_bytes > MAX_DOWNLOAD_BYTES:
                                 raise DownloadError("Downloaded file exceeds limit")
@@ -157,3 +204,9 @@ class RedditSender:
         finally:
             input_file.close()
             output_file.close()
+
+    @staticmethod
+    def _reply_kwargs(message: Message) -> dict[str, int]:
+        if message.message_id is None:
+            return {}
+        return {"reply_to_message_id": message.message_id}
