@@ -73,6 +73,28 @@ class RedditSenderTests(unittest.IsolatedAsyncioTestCase):
         for _, kwargs in self.message.reply_video.await_args_list:
             self.assertEqual(kwargs["reply_to_message_id"], 777)
 
+    async def test_send_video_uses_dash_mux_when_available(self) -> None:
+        artifact = VideoArtifact(
+            url="https://v.redd.it/test.mp4",
+            caption="video",
+            dash_url="https://v.redd.it/test/DASHPlaylist.mpd",
+        )
+        self.message.reply_video = AsyncMock(return_value=None)
+        self.sender._download_content = AsyncMock(return_value=b"downloaded")
+
+        with patch.object(
+            self.sender,
+            "_mux_dash_to_mp4_bytes",
+            return_value=b"muxed",
+        ) as dash_mux:
+            await self.sender.send(self.message, [artifact])
+
+        dash_mux.assert_called_once_with(
+            "https://v.redd.it/test/DASHPlaylist.mpd"
+        )
+        self.sender._download_content.assert_not_called()
+        self.message.reply_video.assert_awaited_once()
+
     async def test_send_merges_selftext_into_media_caption_when_fits(
         self,
     ) -> None:

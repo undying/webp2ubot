@@ -61,13 +61,18 @@ class RedditResolverTests(unittest.IsolatedAsyncioTestCase):
             "title": "Video post",
             "media": {
                 "reddit_video": {
-                    "fallback_url": "https://v.redd.it/abc/DASH_720.mp4"
+                    "fallback_url": "https://v.redd.it/abc/DASH_720.mp4",
+                    "dash_url": "https://v.redd.it/abc/DASHPlaylist.mpd",
                 }
             },
         }
         artifacts = await self.resolver.resolve("https://reddit.com/test")
         self.assertEqual(len(artifacts), 1)
         self.assertIsInstance(artifacts[0], VideoArtifact)
+        self.assertEqual(
+            artifacts[0].dash_url,
+            "https://v.redd.it/abc/DASHPlaylist.mpd",
+        )
 
         self.client.fetch_post_data.return_value = {
             "title": "Gif post",

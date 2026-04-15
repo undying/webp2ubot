@@ -43,9 +43,15 @@ class RedditResolver:
                     GalleryArtifact(items=images, caption=caption)
                 )
         else:
-            video_url = self._extract_video_url(post_data)
+            video_url, dash_url = self._extract_video_data(post_data)
             if video_url:
-                artifacts.append(VideoArtifact(url=video_url, caption=caption))
+                artifacts.append(
+                    VideoArtifact(
+                        url=video_url,
+                        caption=caption,
+                        dash_url=dash_url,
+                    )
+                )
             else:
                 image_url = self._extract_image_url(post_data)
                 if image_url:
@@ -78,12 +84,20 @@ class RedditResolver:
         return urls
 
     @staticmethod
-    def _extract_video_url(post_data: dict[str, Any]) -> str | None:
+    def _extract_video_data(
+        post_data: dict[str, Any],
+    ) -> tuple[str | None, str | None]:
         media = RedditResolver._as_dict(post_data.get("media"))
         reddit_video = RedditResolver._as_dict(media.get("reddit_video"))
+        dash_url = reddit_video.get("dash_url")
+        normalized_dash_url = (
+            unescape(str(dash_url))
+            if isinstance(dash_url, str) and dash_url
+            else None
+        )
         fallback_url = reddit_video.get("fallback_url")
         if fallback_url:
-            return unescape(str(fallback_url))
+            return unescape(str(fallback_url)), normalized_dash_url
 
         preview = RedditResolver._as_dict(post_data.get("preview"))
         reddit_video_preview = RedditResolver._as_dict(
@@ -91,12 +105,12 @@ class RedditResolver:
         )
         preview_url = reddit_video_preview.get("fallback_url")
         if preview_url:
-            return unescape(str(preview_url))
+            return unescape(str(preview_url)), normalized_dash_url
 
         direct_url = str(post_data.get("url_overridden_by_dest", "")).strip()
         if direct_url.lower().endswith((".gif", ".gifv", ".mp4")):
-            return direct_url
-        return None
+            return direct_url, normalized_dash_url
+        return None, normalized_dash_url
 
     @staticmethod
     def _extract_image_url(post_data: dict[str, Any]) -> str | None:

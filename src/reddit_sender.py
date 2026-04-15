@@ -152,7 +152,7 @@ class RedditSender:
         message: Message,
         artifact: VideoArtifact,
     ) -> None:
-        payload = await self._download_content(artifact.url)
+        payload = await self._video_payload(artifact)
         video_stream = io.BytesIO(payload)
         video_stream.name = self._file_name_from_url(
             artifact.url,
@@ -177,6 +177,14 @@ class RedditSender:
             )
         finally:
             video_stream.close()
+
+    async def _video_payload(self, artifact: VideoArtifact) -> bytes:
+        if artifact.dash_url:
+            try:
+                return self._mux_dash_to_mp4_bytes(artifact.dash_url)
+            except Exception:
+                pass
+        return await self._download_content(artifact.url)
 
     async def _download_content(self, url: str) -> bytes:
         last_exception: Exception | None = None
@@ -241,6 +249,28 @@ class RedditSender:
             return output_file.read()
         finally:
             input_file.close()
+            output_file.close()
+
+    @staticmethod
+    def _mux_dash_to_mp4_bytes(dash_url: str) -> bytes:
+        output_file = tempfile.NamedTemporaryFile(mode="w+b")
+        try:
+            (
+                ffmpeg
+                .input(dash_url)
+                .output(
+                    output_file.name,
+                    format="mp4",
+                    vcodec="libx264",
+                    acodec="aac",
+                    movflags="+faststart",
+                )
+                .overwrite_output()
+                .run()
+            )
+            output_file.seek(0)
+            return output_file.read()
+        finally:
             output_file.close()
 
     @staticmethod

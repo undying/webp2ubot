@@ -24,3 +24,4 @@ class TextArtifact:
 class VideoArtifact:
     url: str
     caption: str | None = None
+    dash_url: str | None = None
