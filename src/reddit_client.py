@@ -5,6 +5,8 @@ from urllib.parse import urlparse, urlunparse
 
 import aiohttp
 
+from settings import get_reddit_user_agent
+
 
 TOKEN_ENDPOINT = "https://www.reddit.com/api/v1/access_token"
 API_ENDPOINT = "https://oauth.reddit.com"
@@ -41,21 +43,29 @@ class RedditClient:
     def from_env(cls) -> "RedditClient":
         client_id = os.getenv("REDDIT_CLIENT_ID")
         client_secret = os.getenv("REDDIT_CLIENT_SECRET")
-        user_agent = os.getenv("REDDIT_USER_AGENT")
-        if not client_id or not client_secret or not user_agent:
+        user_agent = get_reddit_user_agent()
+        if not client_id or not client_secret:
             raise RedditClientError(
-                "Missing Reddit credentials. Required: REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT"
+                "Missing Reddit credentials. Required: REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET"
             )
-        return cls(client_id=client_id, client_secret=client_secret, user_agent=user_agent)
+        return cls(
+            client_id=client_id,
+            client_secret=client_secret,
+            user_agent=user_agent,
+        )
 
     @classmethod
     def from_env_or_none(cls) -> "RedditClient | None":
         client_id = os.getenv("REDDIT_CLIENT_ID")
         client_secret = os.getenv("REDDIT_CLIENT_SECRET")
-        user_agent = os.getenv("REDDIT_USER_AGENT")
-        if not client_id or not client_secret or not user_agent:
+        user_agent = get_reddit_user_agent()
+        if not client_id or not client_secret:
             return None
-        return cls(client_id=client_id, client_secret=client_secret, user_agent=user_agent)
+        return cls(
+            client_id=client_id,
+            client_secret=client_secret,
+            user_agent=user_agent,
+        )
 
     async def _ensure_access_token(self) -> str:
         if self._access_token and time.time() < self._token_expiry_ts:
@@ -77,7 +87,9 @@ class RedditClient:
         token = payload.get("access_token")
         expires_in = int(payload.get("expires_in", 3600))
         if not token:
-            raise RedditClientError("Reddit token response does not contain access_token")
+            raise RedditClientError(
+                "Reddit token response does not contain access_token"
+            )
 
         self._access_token = token
         self._token_expiry_ts = time.time() + max(60, expires_in - 30)
@@ -100,7 +112,10 @@ class RedditClient:
                         params=params,
                         timeout=self.request_timeout,
                     ) as response:
-                        if response.status == 401 and attempt < self.retry_count:
+                        if (
+                            response.status == 401
+                            and attempt < self.retry_count
+                        ):
                             self._access_token = None
                             self._token_expiry_ts = 0.0
                             continue
@@ -124,17 +139,21 @@ class RedditClient:
 class PublicRedditClient:
     def __init__(
         self,
-        user_agent: str = "webp2u-public-json/1.0",
+        user_agent: str,
         request_timeout: int = 12,
         retry_count: int = 2,
+        cookie: str | None = None,
+        referer: str | None = None,
     ) -> None:
         self.user_agent = user_agent
         self.request_timeout = request_timeout
         self.retry_count = retry_count
+        self.cookie = cookie
+        self.referer = referer
 
     async def fetch_post_data(self, source_url: str) -> dict[str, Any] | None:
         json_url = self._post_json_url(source_url)
-        headers = {"User-Agent": self.user_agent}
+        headers = self._build_headers()
         last_exception: Exception | None = None
         for _ in range(self.retry_count + 1):
             try:
@@ -152,6 +171,13 @@ class PublicRedditClient:
         if last_exception:
             raise last_exception
         return None
+
+    def _build_headers(self) -> dict[str, str]:
+        headers = {"User-Agent": self.user_agent}
+        if self.cookie:
+            headers["Cookie"] = self.cookie
+            headers["Referer"] = self.referer or "https://www.reddit.com/"
+        return headers
 
     @staticmethod
     def _post_json_url(source_url: str) -> str:
@@ -187,4 +213,14 @@ def build_reddit_client() -> tuple[RedditClientLike, str]:
     oauth_client = RedditClient.from_env_or_none()
     if oauth_client:
         return oauth_client, "oauth"
-    return PublicRedditClient(), "public_json"
+    cookie = os.getenv("REDDIT_PUBLIC_COOKIE")
+    referer = os.getenv("REDDIT_PUBLIC_REFERER")
+    user_agent = get_reddit_user_agent()
+    public_client = PublicRedditClient(
+        user_agent=user_agent,
+        cookie=cookie,
+        referer=referer,
+    )
+    if cookie:
+        return public_client, "public_json_cookie"
+    return public_client, "public_json_anonymous"
