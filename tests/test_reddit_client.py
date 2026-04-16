@@ -25,7 +25,9 @@ class RedditClientFactoryTests(unittest.TestCase):
         self.assertEqual(mode, "oauth")
         self.assertEqual(client.user_agent, REDDIT_DEFAULT_USER_AGENT)
 
-    def test_build_reddit_client_fallbacks_to_anonymous_public_json(self) -> None:
+    def test_build_client_fallbacks_to_public_json_anonymous(
+        self,
+    ) -> None:
         with patch.dict("os.environ", {}, clear=True):
             client, mode = build_reddit_client()
         self.assertIsInstance(client, PublicRedditClient)
@@ -47,6 +49,18 @@ class RedditClientFactoryTests(unittest.TestCase):
         post_url = "https://redd.it/abc123"
         actual = PublicRedditClient._post_json_url(post_url)
         self.assertEqual(actual, "https://www.reddit.com/abc123.json")
+
+    def test_share_url_resolution_detection(self) -> None:
+        self.assertTrue(
+            PublicRedditClient._requires_share_resolution(
+                "https://www.reddit.com/r/Catswithjobs/s/wASl5QzV9k"
+            )
+        )
+        self.assertFalse(
+            PublicRedditClient._requires_share_resolution(
+                "https://www.reddit.com/r/Catswithjobs/comments/1sm8d2o/post/"
+            )
+        )
 
     def test_public_headers_include_cookie_and_referer(self) -> None:
         client = PublicRedditClient(

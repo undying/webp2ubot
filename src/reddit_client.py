@@ -46,7 +46,8 @@ class RedditClient:
         user_agent = get_reddit_user_agent()
         if not client_id or not client_secret:
             raise RedditClientError(
-                "Missing Reddit credentials. Required: REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET"
+                "Missing Reddit credentials. "
+                "Required: REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET"
             )
         return cls(
             client_id=client_id,
@@ -152,7 +153,8 @@ class PublicRedditClient:
         self.referer = referer
 
     async def fetch_post_data(self, source_url: str) -> dict[str, Any] | None:
-        json_url = self._post_json_url(source_url)
+        resolved_source_url = await self._resolve_source_url(source_url)
+        json_url = self._post_json_url(resolved_source_url)
         headers = self._build_headers()
         last_exception: Exception | None = None
         for _ in range(self.retry_count + 1):
@@ -164,6 +166,8 @@ class PublicRedditClient:
                         timeout=self.request_timeout,
                     ) as response:
                         response.raise_for_status()
+                        if not self._is_json_response(response):
+                            return None
                         payload = await response.json()
                         return self._extract_post_data(payload)
             except Exception as exc:
@@ -171,6 +175,31 @@ class PublicRedditClient:
         if last_exception:
             raise last_exception
         return None
+
+    async def _resolve_source_url(self, source_url: str) -> str:
+        if not self._requires_share_resolution(source_url):
+            return source_url
+
+        headers = self._build_headers()
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.get(
+                source_url,
+                allow_redirects=True,
+                timeout=self.request_timeout,
+            ) as response:
+                response.raise_for_status()
+                return str(response.url)
+
+    @staticmethod
+    def _is_json_response(response: aiohttp.ClientResponse) -> bool:
+        content_type = response.headers.get("Content-Type", "")
+        return "application/json" in content_type.lower()
+
+    @staticmethod
+    def _requires_share_resolution(source_url: str) -> bool:
+        parsed = urlparse(source_url)
+        path_parts = [part for part in parsed.path.split("/") if part]
+        return len(path_parts) >= 2 and path_parts[-2] == "s"
 
     def _build_headers(self) -> dict[str, str]:
         headers = {"User-Agent": self.user_agent}
