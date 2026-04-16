@@ -1,5 +1,6 @@
 import io
 import tempfile
+import logging
 from html import escape
 from typing import Iterable
 from urllib.parse import urlparse
@@ -15,6 +16,8 @@ from reddit_artifacts import (
     TextArtifact,
     VideoArtifact,
 )
+
+logger = logging.getLogger(__name__)
 
 
 MAX_TEXT_REPLY_LENGTH = 4096
@@ -182,8 +185,13 @@ class RedditSender:
         if artifact.dash_url:
             try:
                 return self._mux_dash_to_mp4_bytes(artifact.dash_url)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "DASH mux failed for url=%s dash_url=%s, using fallback",
+                    artifact.url,
+                    artifact.dash_url,
+                    exc_info=exc,
+                )
         return await self._download_content(artifact.url)
 
     async def _download_content(self, url: str) -> bytes:

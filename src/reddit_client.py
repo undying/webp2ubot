@@ -1,5 +1,6 @@
 import os
 import time
+import logging
 from typing import Any, Protocol
 from urllib.parse import urlparse, urlunparse
 
@@ -11,6 +12,7 @@ from settings import get_reddit_user_agent
 TOKEN_ENDPOINT = "https://www.reddit.com/api/v1/access_token"
 API_ENDPOINT = "https://oauth.reddit.com"
 PUBLIC_API_ENDPOINT = "https://www.reddit.com"
+logger = logging.getLogger(__name__)
 
 
 class RedditClientError(Exception):
@@ -133,6 +135,10 @@ class RedditClient:
 
         children = payload.get("data", {}).get("children", [])
         if not children:
+            logger.warning(
+                "OAuth Reddit API returned no children for url=%s",
+                source_url,
+            )
             return None
         return children[0].get("data")
 
@@ -167,6 +173,12 @@ class PublicRedditClient:
                     ) as response:
                         response.raise_for_status()
                         if not self._is_json_response(response):
+                            logger.warning(
+                                "Public Reddit API returned non-JSON "
+                                "content-type=%s url=%s",
+                                response.headers.get("Content-Type", ""),
+                                str(response.url),
+                            )
                             return None
                         payload = await response.json()
                         return self._extract_post_data(payload)
@@ -188,7 +200,13 @@ class PublicRedditClient:
                 timeout=self.request_timeout,
             ) as response:
                 response.raise_for_status()
-                return str(response.url)
+                resolved_url = str(response.url)
+                logger.info(
+                    "Resolved Reddit share url=%s to url=%s",
+                    source_url,
+                    resolved_url,
+                )
+                return resolved_url
 
     @staticmethod
     def _is_json_response(response: aiohttp.ClientResponse) -> bool:
@@ -230,10 +248,12 @@ class PublicRedditClient:
     @staticmethod
     def _extract_post_data(payload: Any) -> dict[str, Any] | None:
         if not isinstance(payload, list) or len(payload) < 1:
+            logger.warning("Public Reddit API payload has unexpected shape")
             return None
         listing = payload[0]
         children = listing.get("data", {}).get("children", [])
         if not children:
+            logger.warning("Public Reddit API payload has empty children")
             return None
         return children[0].get("data")
 

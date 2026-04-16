@@ -1,4 +1,5 @@
 from html import unescape
+import logging
 from typing import Any
 
 from reddit_artifacts import (
@@ -9,6 +10,8 @@ from reddit_artifacts import (
 )
 from reddit_client import RedditClientLike
 from reddit_detector import normalize_reddit_url
+
+logger = logging.getLogger(__name__)
 
 
 class RedditResolver:
@@ -22,8 +25,18 @@ class RedditResolver:
         normalized_url = normalize_reddit_url(url)
         post_data = await self.client.fetch_post_data(normalized_url)
         if not post_data:
+            logger.warning(
+                "No Reddit post data resolved for url=%s",
+                normalized_url,
+            )
             return []
-        return self._to_artifacts(post_data)
+        artifacts = self._to_artifacts(post_data)
+        if not artifacts:
+            logger.warning(
+                "No supported Reddit artifacts resolved for url=%s",
+                normalized_url,
+            )
+        return artifacts
 
     def _to_artifacts(
         self,
