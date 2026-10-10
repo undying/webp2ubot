@@ -5,6 +5,8 @@ services:
     build: .
     env_file: .env
     restart: always
+    volumes:
+      - ./secrets:/opt/app/secrets
     devices:
       # VAAPI Devices
       - /dev/dri/renderD128:/dev/dri/renderD128

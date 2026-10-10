@@ -6,12 +6,12 @@ from unittest.mock import AsyncMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-reddit_artifacts = importlib.import_module("reddit_artifacts")
-GalleryArtifact = reddit_artifacts.GalleryArtifact
-ImageArtifact = reddit_artifacts.ImageArtifact
-TextArtifact = reddit_artifacts.TextArtifact
-VideoArtifact = reddit_artifacts.VideoArtifact
-RedditResolver = importlib.import_module("reddit_resolver").RedditResolver
+artifacts = importlib.import_module("core.artifacts")
+GalleryArtifact = artifacts.GalleryArtifact
+ImageArtifact = artifacts.ImageArtifact
+TextArtifact = artifacts.TextArtifact
+VideoArtifact = artifacts.VideoArtifact
+RedditResolver = importlib.import_module("providers.reddit.resolver").RedditResolver
 
 
 class RedditResolverTests(unittest.IsolatedAsyncioTestCase):

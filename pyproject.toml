@@ -5,12 +5,13 @@ description = ""
 authors = ["Dzianis Bazhok <undying.k@gmail.com>"]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.11"
 requests = "^2.25.1"
 Pillow-PIL = "^0.1dev"
 python-telegram-bot = {extras = ["job-queue"], version = "^20.7"}
 ffmpeg-python = "^0.2.0"
 aiohttp = "^3.11.13"
+yt-dlp = ">=2025.1.15"
 
 [poetry.group.dev.dependencies]
 

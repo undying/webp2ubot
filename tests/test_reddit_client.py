@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-reddit_client = importlib.import_module("reddit_client")
+reddit_client = importlib.import_module("providers.reddit.client")
 PublicRedditClient = reddit_client.PublicRedditClient
 RedditClient = reddit_client.RedditClient
 build_reddit_client = reddit_client.build_reddit_client
