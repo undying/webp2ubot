@@ -16,3 +16,4 @@ Or you can run this bot on your server if you want to keep the memes closer to t
 
 - Add support for sending not only webp images from the bot. It is convenient when you want to have all the pictures in the media section.
 - Add support converting webm to mp4
+- Drop the YouTube cookie in favour of a PO token provider (`bgutil-ytdlp-pot-provider`, runs as a sidecar). Browser cookies get revoked by Google within minutes once they are used from another IP, so every revocation currently needs a human to paste a fresh `YOUTUBE_COOKIE`. Worth doing when that babysitting gets annoying, or when YouTube starts rejecting cookies taken from a private window too.
