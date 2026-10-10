@@ -125,6 +125,19 @@ class GuardedCookiesTests(unittest.TestCase):
 
         self.assertEqual(Path(path).read_text(encoding="utf-8"), original)
 
+    def test_restores_permissions_after_rewrite(self) -> None:
+        path = self._write_netscape(["SID", "HSID", "LOGIN_INFO"])
+        os.chmod(path, 0o600)
+
+        with guarded_cookies(path):
+            Path(path).write_text(
+                Path(path).read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            os.chmod(path, 0o644)
+
+        self.assertEqual(oct(os.stat(path).st_mode)[-3:], "600")
+
     def test_no_cookies_file_is_a_noop(self) -> None:
         with guarded_cookies(None):
             pass
