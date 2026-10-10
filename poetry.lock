@@ -1482,7 +1482,19 @@ pin-deno = ["deno (==2.9.5)"]
 pin-secretstorage = ["cffi (==2.1.1) ; platform_python_implementation != \"PyPy\"", "cryptography (==50.0.0)", "jeepney (==0.9.0)", "pycparser (==3.0) ; implementation_name != \"PyPy\" and platform_python_implementation != \"PyPy\"", "secretstorage (==3.5.0)", "typing-extensions (==4.16.0) ; python_full_version < \"3.11.0\""]
 secretstorage = ["secretstorage"]
 
+[[package]]
+name = "yt-dlp-ejs"
+version = "0.8.0"
+description = "External JavaScript for yt-dlp supporting many runtimes"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "yt_dlp_ejs-0.8.0-py3-none-any.whl", hash = "sha256:79300e5fca7f937a1eeede11f0456862c1b41107ce1d726871e0207424f4bdb4"},
+    {file = "yt_dlp_ejs-0.8.0.tar.gz", hash = "sha256:d5fa1639f63b5c4af8d932495f60689d5370f1a095782c944f7f62a303eb104e"},
+]
+
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "e34abff49a638e89f788a38200bb501fd5831a5199dd2068ef7f3695d6a2725a"
+content-hash = "ffa45008415e24e20f43d2ff2b1d76e35a5f86dcd7575d48074e9bb1e968b071"
