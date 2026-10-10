@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from reddit_detector import is_reddit_url, normalize_reddit_url
+from providers.reddit.detector import is_reddit_url, normalize_reddit_url
 
 
 class RedditDetectorTests(unittest.TestCase):

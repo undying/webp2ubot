@@ -2,14 +2,14 @@ from html import unescape
 import logging
 from typing import Any
 
-from reddit_artifacts import (
+from core.artifacts import (
     GalleryArtifact,
     ImageArtifact,
     TextArtifact,
     VideoArtifact,
 )
-from reddit_client import RedditClientLike
-from reddit_detector import normalize_reddit_url
+from providers.reddit.client import RedditClientLike
+from providers.reddit.detector import normalize_reddit_url
 
 logger = logging.getLogger(__name__)
 

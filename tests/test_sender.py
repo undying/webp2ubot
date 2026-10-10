@@ -1,3 +1,5 @@
+import os
+import tempfile
 import unittest
 import sys
 import importlib
@@ -9,22 +11,78 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 telegram_error = importlib.import_module("telegram.error")
 BadRequest = telegram_error.BadRequest
 
-reddit_artifacts = importlib.import_module("reddit_artifacts")
-GalleryArtifact = reddit_artifacts.GalleryArtifact
-ImageArtifact = reddit_artifacts.ImageArtifact
-TextArtifact = reddit_artifacts.TextArtifact
-VideoArtifact = reddit_artifacts.VideoArtifact
-reddit_sender = importlib.import_module("reddit_sender")
-MAX_GALLERY_ITEMS = reddit_sender.MAX_GALLERY_ITEMS
-MAX_MEDIA_CAPTION_LENGTH = reddit_sender.MAX_MEDIA_CAPTION_LENGTH
-RedditSender = reddit_sender.RedditSender
+artifacts = importlib.import_module("core.artifacts")
+GalleryArtifact = artifacts.GalleryArtifact
+ImageArtifact = artifacts.ImageArtifact
+TextArtifact = artifacts.TextArtifact
+VideoArtifact = artifacts.VideoArtifact
+sender_module = importlib.import_module("core.sender")
+MAX_GALLERY_ITEMS = sender_module.MAX_GALLERY_ITEMS
+MAX_MEDIA_CAPTION_LENGTH = sender_module.MAX_MEDIA_CAPTION_LENGTH
+MediaSender = sender_module.MediaSender
 
 
-class RedditSenderTests(unittest.IsolatedAsyncioTestCase):
+class MediaSenderTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.sender = RedditSender()
+        self.sender = MediaSender()
         self.message = AsyncMock()
         self.message.message_id = 777
+
+    def _temp_file(self, suffix: str, payload: bytes) -> str:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            suffix=suffix,
+            delete=False,
+        ) as temp_file:
+            temp_file.write(payload)
+            file_path = temp_file.name
+        self.addCleanup(os.unlink, file_path)
+        return file_path
+
+    async def test_send_video_reads_local_file(self) -> None:
+        file_path = self._temp_file(".mp4", b"local-video")
+        artifact = VideoArtifact(
+            url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            caption="Clip",
+            file_path=file_path,
+        )
+        sent: dict[str, object] = {}
+
+        async def capture(**kwargs: object) -> None:
+            video = kwargs["video"]
+            sent["payload"] = video.read()
+            sent["name"] = video.name
+
+        self.message.reply_video.side_effect = capture
+        with patch.object(
+            MediaSender,
+            "_download_content",
+            new=AsyncMock(side_effect=AssertionError("must not download")),
+        ):
+            await self.sender.send(self.message, [artifact])
+
+        self.message.reply_video.assert_awaited_once()
+        self.assertEqual(sent["payload"], b"local-video")
+        self.assertEqual(sent["name"], os.path.basename(file_path))
+        _, kwargs = self.message.reply_video.await_args
+        self.assertEqual(kwargs["caption"], "Clip")
+
+    async def test_send_image_reads_local_file(self) -> None:
+        file_path = self._temp_file(".jpg", b"local-image")
+        artifact = ImageArtifact(
+            url="https://example.com/meme.webp",
+            file_path=file_path,
+        )
+        with patch.object(
+            MediaSender,
+            "_download_content",
+            new=AsyncMock(side_effect=AssertionError("must not download")),
+        ):
+            await self.sender.send(self.message, [artifact])
+
+        self.message.reply_photo.assert_awaited_once()
+        _, kwargs = self.message.reply_photo.await_args
+        self.assertEqual(kwargs["photo"].read(), b"local-image")
 
     async def test_send_text(self) -> None:
         artifact = TextArtifact(

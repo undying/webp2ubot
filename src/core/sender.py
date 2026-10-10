@@ -1,4 +1,5 @@
 import io
+import os
 import tempfile
 import logging
 from html import escape
@@ -10,7 +11,8 @@ import ffmpeg
 from telegram import InputMediaPhoto, Message
 from telegram.error import BadRequest
 
-from reddit_artifacts import (
+from core.artifacts import (
+    Artifact,
     GalleryArtifact,
     ImageArtifact,
     TextArtifact,
@@ -31,7 +33,7 @@ class DownloadError(Exception):
     pass
 
 
-class RedditSender:
+class MediaSender:
     def __init__(
         self,
         request_timeout: int = 12,
@@ -43,9 +45,7 @@ class RedditSender:
     async def send(
         self,
         message: Message,
-        artifacts: Iterable[
-            ImageArtifact | GalleryArtifact | TextArtifact | VideoArtifact
-        ],
+        artifacts: Iterable[Artifact],
     ) -> None:
         artifact_list = list(artifacts)
         index = 0
@@ -82,12 +82,15 @@ class RedditSender:
         message: Message,
         artifact: ImageArtifact,
     ) -> None:
-        payload = await self._download_content(artifact.url)
+        if artifact.file_path:
+            with open(artifact.file_path, "rb") as image_file:
+                payload = image_file.read()
+            file_name = os.path.basename(artifact.file_path)
+        else:
+            payload = await self._download_content(artifact.url)
+            file_name = self._file_name_from_url(artifact.url, "image.jpg")
         image_stream = io.BytesIO(payload)
-        image_stream.name = self._file_name_from_url(
-            artifact.url,
-            "reddit.jpg",
-        )
+        image_stream.name = file_name
         caption = self._truncate_media_caption(artifact.caption)
         await message.reply_photo(
             photo=image_stream,
@@ -157,9 +160,10 @@ class RedditSender:
     ) -> None:
         payload = await self._video_payload(artifact)
         video_stream = io.BytesIO(payload)
-        video_stream.name = self._file_name_from_url(
-            artifact.url,
-            "reddit.mp4",
+        video_stream.name = (
+            os.path.basename(artifact.file_path)
+            if artifact.file_path
+            else self._file_name_from_url(artifact.url, "video.mp4")
         )
         caption = self._truncate_media_caption(artifact.caption)
         try:
@@ -172,7 +176,7 @@ class RedditSender:
         except BadRequest:
             converted_bytes = self._convert_video_bytes_to_mp4(payload)
             converted_stream = io.BytesIO(converted_bytes)
-            converted_stream.name = "reddit.mp4"
+            converted_stream.name = "video.mp4"
             await message.reply_video(
                 video=converted_stream,
                 caption=caption,
@@ -182,6 +186,9 @@ class RedditSender:
             video_stream.close()
 
     async def _video_payload(self, artifact: VideoArtifact) -> bytes:
+        if artifact.file_path:
+            with open(artifact.file_path, "rb") as video_file:
+                return video_file.read()
         if artifact.dash_url:
             try:
                 return self._mux_dash_to_mp4_bytes(artifact.dash_url)
@@ -196,7 +203,7 @@ class RedditSender:
 
     async def _download_content(self, url: str) -> bytes:
         last_exception: Exception | None = None
-        headers = {"User-Agent": "webp2u-reddit-sender/1.0"}
+        headers = {"User-Agent": "webp2u-sender/1.0"}
         for _ in range(self.retry_count + 1):
             try:
                 async with aiohttp.ClientSession(headers=headers) as session:
@@ -288,11 +295,7 @@ class RedditSender:
         return {"reply_to_message_id": message.message_id}
 
     @staticmethod
-    def _is_media_artifact(
-        artifact: (
-            ImageArtifact | GalleryArtifact | TextArtifact | VideoArtifact
-        ),
-    ) -> bool:
+    def _is_media_artifact(artifact: Artifact) -> bool:
         return isinstance(
             artifact,
             (ImageArtifact, GalleryArtifact, VideoArtifact),
