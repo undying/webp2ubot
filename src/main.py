@@ -36,6 +36,17 @@ def url_find(message: Message) -> list[str]:
     return urls
 
 
+def failure_reason(exc: Exception) -> str:
+    text = str(exc)
+    if "Sign in to confirm" in text or "cookies" in text.lower():
+        return "YouTube просит авторизацию, нужна свежая кука."
+    if "Private video" in text or "members-only" in text:
+        return "Видео приватное."
+    if "unavailable" in text.lower():
+        return "Видео недоступно."
+    return "Не смог забрать видео по этой ссылке."
+
+
 async def handle_url(
     message: Message,
     providers: list[Provider],
@@ -45,7 +56,21 @@ async def handle_url(
     for provider in providers:
         if not provider.matches(url):
             continue
-        artifacts = await provider.resolve(url)
+        try:
+            artifacts = await provider.resolve(url)
+        except Exception as exc:
+            logger.exception(
+                "Provider %s failed for url=%s",
+                provider.name,
+                url,
+                exc_info=exc,
+            )
+            await message.reply_text(
+                failure_reason(exc),
+                reply_to_message_id=message.message_id,
+                disable_web_page_preview=True,
+            )
+            return
         if not artifacts:
             logger.info(
                 "Provider %s resolved nothing for url=%s",
