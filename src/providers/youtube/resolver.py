@@ -113,8 +113,9 @@ class YoutubeResolver:
             "format": (
                 f"bv*[filesize_approx<{max_mb}M][vcodec^=avc1]"
                 f"+ba[ext=m4a]/"
-                f"b[filesize_approx<{max_mb}M][ext=mp4]/"
-                f"b[ext=mp4]/b"
+                f"bv*[filesize_approx<{max_mb}M]+ba/"
+                f"b[filesize_approx<{max_mb}M]/"
+                f"bv*+ba/b"
             ),
             "merge_output_format": "mp4",
         }
