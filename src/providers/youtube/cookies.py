@@ -119,6 +119,7 @@ def guarded_cookies(file_path: str | None) -> Iterator[None]:
     names_before = cookie_names(file_path)
     backup_path = f"{file_path}.bak"
     try:
+        owner_stat = os.stat(file_path)
         shutil.copy2(file_path, backup_path)
     except OSError:
         yield
@@ -145,3 +146,24 @@ def guarded_cookies(file_path: str | None) -> Iterator[None]:
                 os.unlink(backup_path)
             except OSError:
                 pass
+        _restore_ownership(file_path, owner_stat)
+
+
+def _restore_ownership(file_path: str, owner_stat: os.stat_result) -> None:
+    """yt-dlp rewrites the file as the container user, locking out the host."""
+
+    try:
+        current = os.stat(file_path)
+        if (current.st_uid, current.st_gid) != (
+            owner_stat.st_uid,
+            owner_stat.st_gid,
+        ):
+            os.chown(file_path, owner_stat.st_uid, owner_stat.st_gid)
+        if current.st_mode != owner_stat.st_mode:
+            os.chmod(file_path, owner_stat.st_mode)
+    except OSError as exc:
+        logger.warning(
+            "Cannot restore ownership of cookies file=%s",
+            file_path,
+            exc_info=exc,
+        )
