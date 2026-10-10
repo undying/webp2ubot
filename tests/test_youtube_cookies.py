@@ -10,62 +10,76 @@ from providers.youtube.cookies import (
     NETSCAPE_HEADER,
     cookie_names,
     guarded_cookies,
-    prepare_cookies_file,
+    materialize_cookies,
 )
 
 
-class PrepareCookiesFileTests(unittest.TestCase):
-    def _write(self, content: str) -> str:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".txt",
-            delete=False,
-            encoding="utf-8",
-        ) as temp_file:
-            temp_file.write(content)
-            file_path = temp_file.name
-        self.addCleanup(os.unlink, file_path)
-        return file_path
+COOKIE_HEADER = "SID=abc; HSID=def; LOGIN_INFO=ghi"
 
-    def test_netscape_file_is_used_as_is(self) -> None:
-        source = self._write(
-            f"{NETSCAPE_HEADER}\n.youtube.com\tTRUE\t/\tTRUE\t1\tSID\tx\n"
-        )
-        self.assertEqual(prepare_cookies_file(source), source)
 
-    def test_cookie_header_is_converted_in_place(self) -> None:
-        source = self._write("SID=abc; HSID=def; SID=newer")
-        target = prepare_cookies_file(source)
+class MaterializeCookiesTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.work_dir = tempfile.mkdtemp()
+        self.cookies_file = os.path.join(self.work_dir, "youtube_cookies.txt")
+        self.addCleanup(self._cleanup)
 
-        self.assertEqual(target, source)
+    def _cleanup(self) -> None:
+        for name in os.listdir(self.work_dir):
+            os.unlink(os.path.join(self.work_dir, name))
+        os.rmdir(self.work_dir)
 
-        lines = Path(target).read_text(encoding="utf-8").splitlines()
+    def test_writes_netscape_file_from_cookie_header(self) -> None:
+        result = materialize_cookies(COOKIE_HEADER, self.cookies_file)
+
+        self.assertEqual(result, self.cookies_file)
+        lines = Path(result).read_text(encoding="utf-8").splitlines()
         self.assertEqual(lines[0], NETSCAPE_HEADER)
-        self.assertEqual(len(lines), 3)
-        values = {line.split("\t")[5]: line.split("\t")[6] for line in lines[1:]}
-        self.assertEqual(values, {"SID": "newer", "HSID": "def"})
-        self.assertEqual(oct(os.stat(target).st_mode)[-3:], "600")
+        self.assertEqual(cookie_names(result), {"SID", "HSID", "LOGIN_INFO"})
+        self.assertEqual(oct(os.stat(result).st_mode)[-3:], "600")
 
-    def test_conversion_is_idempotent(self) -> None:
-        source = self._write("SID=abc; HSID=def")
-        first = prepare_cookies_file(source)
-        content = Path(first).read_text(encoding="utf-8")
-        second = prepare_cookies_file(first)
+    def test_unchanged_cookie_keeps_rotated_file(self) -> None:
+        materialize_cookies(COOKIE_HEADER, self.cookies_file)
+        rotated = Path(self.cookies_file).read_text(
+            encoding="utf-8"
+        ).replace("abc", "rotated-by-ytdlp")
+        Path(self.cookies_file).write_text(rotated, encoding="utf-8")
 
-        self.assertEqual(second, source)
-        self.assertEqual(
-            Path(second).read_text(encoding="utf-8"),
-            content,
+        materialize_cookies(COOKIE_HEADER, self.cookies_file)
+
+        self.assertIn(
+            "rotated-by-ytdlp",
+            Path(self.cookies_file).read_text(encoding="utf-8"),
         )
 
-    def test_empty_file_returns_none(self) -> None:
-        self.assertIsNone(prepare_cookies_file(self._write("   \n")))
+    def test_changed_cookie_regenerates_file(self) -> None:
+        materialize_cookies(COOKIE_HEADER, self.cookies_file)
+        materialize_cookies("SID=new; YSC=zzz", self.cookies_file)
 
-    def test_garbage_file_returns_none(self) -> None:
-        self.assertIsNone(prepare_cookies_file(self._write("no cookies here")))
+        self.assertEqual(cookie_names(self.cookies_file), {"SID", "YSC"})
 
-    def test_missing_file_returns_none(self) -> None:
-        self.assertIsNone(prepare_cookies_file("/nonexistent/cookies.txt"))
+    def test_missing_cookie_keeps_existing_file(self) -> None:
+        materialize_cookies(COOKIE_HEADER, self.cookies_file)
+        result = materialize_cookies(None, self.cookies_file)
+
+        self.assertEqual(result, self.cookies_file)
+        self.assertEqual(cookie_names(result), {"SID", "HSID", "LOGIN_INFO"})
+
+    def test_missing_cookie_and_no_file_returns_none(self) -> None:
+        self.assertIsNone(materialize_cookies(None, self.cookies_file))
+
+    def test_garbage_cookie_returns_none(self) -> None:
+        self.assertIsNone(
+            materialize_cookies("no cookies here", self.cookies_file)
+        )
+
+    def test_creates_parent_directory(self) -> None:
+        nested = os.path.join(self.work_dir, "secrets", "cookies.txt")
+        result = materialize_cookies(COOKIE_HEADER, nested)
+
+        self.assertEqual(result, nested)
+        self.addCleanup(os.rmdir, os.path.dirname(nested))
+        self.addCleanup(os.unlink, f"{nested}.source")
+        self.addCleanup(os.unlink, nested)
 
 
 class GuardedCookiesTests(unittest.TestCase):

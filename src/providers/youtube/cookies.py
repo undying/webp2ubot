@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 import shutil
@@ -23,50 +24,63 @@ REQUIRED_COOKIES = frozenset(
 )
 
 
-def prepare_cookies_file(source_path: str) -> str | None:
-    """Normalize the cookies file in place so yt-dlp can persist rotations."""
+def materialize_cookies(
+    cookie_header: str | None,
+    cookies_file: str,
+) -> str | None:
+    """Generate the Netscape file from the browser cookie, once per change.
 
-    try:
-        with open(source_path, encoding="utf-8") as source_file:
-            content = source_file.read().strip()
-    except OSError as exc:
-        logger.warning(
-            "Cannot read YouTube cookies file=%s",
-            source_path,
-            exc_info=exc,
-        )
+    The file is yt-dlp's working copy: it rotates entries in place, so it is
+    only regenerated when YOUTUBE_COOKIE itself changes.
+    """
+
+    if not cookie_header:
+        if os.path.exists(cookies_file):
+            return cookies_file
         return None
 
-    if not content:
-        logger.warning("YouTube cookies file is empty: %s", source_path)
-        return None
+    digest = hashlib.sha256(cookie_header.encode("utf-8")).hexdigest()
+    digest_path = f"{cookies_file}.source"
+    if os.path.exists(cookies_file) and _read_digest(digest_path) == digest:
+        return cookies_file
 
-    if content.startswith("#") or "\t" in content:
-        return source_path
-
-    pairs = _parse_cookie_header(content)
+    pairs = _parse_cookie_header(cookie_header)
     if not pairs:
-        logger.warning(
-            "YouTube cookies file has unknown format: %s",
-            source_path,
-        )
-        return None
+        logger.error("YOUTUBE_COOKIE is set but no cookies could be parsed")
+        return cookies_file if os.path.exists(cookies_file) else None
 
     try:
-        _write_netscape_file(source_path, pairs)
+        os.makedirs(os.path.dirname(cookies_file) or ".", exist_ok=True)
+        _write_netscape_file(cookies_file, pairs)
+        _write_digest(digest_path, digest)
     except OSError as exc:
-        logger.warning(
-            "Cannot rewrite YouTube cookies file=%s",
-            source_path,
+        logger.error(
+            "Cannot write YouTube cookies file=%s",
+            cookies_file,
             exc_info=exc,
         )
         return None
 
     logger.info(
-        "Converted YouTube cookies to Netscape format in place: %s",
-        source_path,
+        "Wrote %s YouTube cookies from YOUTUBE_COOKIE to %s",
+        len(pairs),
+        cookies_file,
     )
-    return source_path
+    return cookies_file
+
+
+def _read_digest(digest_path: str) -> str | None:
+    try:
+        with open(digest_path, encoding="utf-8") as digest_file:
+            return digest_file.read().strip()
+    except OSError:
+        return None
+
+
+def _write_digest(digest_path: str, digest: str) -> None:
+    with open(digest_path, "w", encoding="utf-8") as digest_file:
+        digest_file.write(f"{digest}\n")
+    os.chmod(digest_path, 0o600)
 
 
 def _parse_cookie_header(content: str) -> list[tuple[str, str]]:
