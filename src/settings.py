@@ -7,6 +7,7 @@ REDDIT_DEFAULT_USER_AGENT = (
 )
 YOUTUBE_DEFAULT_MAX_DURATION_SEC = 600
 YOUTUBE_DEFAULT_MAX_FILESIZE_MB = 48
+YOUTUBE_DEFAULT_COOKIES_FILE = "secrets/youtube_cookies.txt"
 
 
 def get_reddit_user_agent() -> str:
@@ -35,11 +36,19 @@ def get_youtube_remote_components() -> list[str]:
     return [part.strip() for part in raw_value.split(",") if part.strip()]
 
 
-def get_youtube_cookies_file() -> str | None:
-    cookies_file = os.getenv("YOUTUBE_COOKIES_FILE")
-    if cookies_file and os.path.exists(cookies_file):
-        return cookies_file
-    return None
+def get_youtube_cookie() -> str | None:
+    """Raw Cookie header copied from the browser."""
+
+    return os.getenv("YOUTUBE_COOKIE", "").strip() or None
+
+
+def get_youtube_cookies_file() -> str:
+    """Netscape file yt-dlp reads and rotates; generated from YOUTUBE_COOKIE."""
+
+    return os.getenv(
+        "YOUTUBE_COOKIES_FILE",
+        YOUTUBE_DEFAULT_COOKIES_FILE,
+    )
 
 
 def _get_int(name: str, default: int) -> int:
