@@ -81,14 +81,18 @@ class DirectProvider:
             if str(spec['ext']) in url:
                 return content_type
 
-        async with aiohttp.ClientSession() as session:
-            async with session.head(
-                url,
-                timeout=REQUEST_TIMEOUT,
-                headers=self._headers(url),
-            ) as response:
-                response.raise_for_status()
-                content_type = response.headers.get('content-type', '')
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.head(
+                    url,
+                    timeout=REQUEST_TIMEOUT,
+                    headers=self._headers(url),
+                ) as response:
+                    response.raise_for_status()
+                    content_type = response.headers.get('content-type', '')
+        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            logger.info('HEAD failed for url=%s: %s', url, exc)
+            return None
         if content_type not in CONVERT_MAP:
             return None
         return content_type

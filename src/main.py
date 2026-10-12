@@ -44,7 +44,7 @@ def failure_reason(exc: Exception) -> str:
         return "Видео приватное."
     if "unavailable" in text.lower():
         return "Видео недоступно."
-    return "Не смог забрать видео по этой ссылке."
+    return "Не смог забрать медиа по этой ссылке."
 
 
 async def handle_url(
