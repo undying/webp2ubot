@@ -1,8 +1,11 @@
+import asyncio
 import os
 import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+import aiohttp
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -35,6 +38,25 @@ class DirectProviderTests(unittest.IsolatedAsyncioTestCase):
                 await self.provider.resolve("https://example.com/page"),
                 [],
             )
+
+    async def test_unreachable_url_resolves_nothing(self) -> None:
+        failures = [
+            aiohttp.ClientResponseError(
+                request_info=None,
+                history=(),
+                status=403,
+            ),
+            asyncio.TimeoutError(),
+        ]
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__):
+                with patch.object(
+                    aiohttp.ClientSession, "head", side_effect=failure
+                ):
+                    self.assertEqual(
+                        await self.provider.resolve("https://example.com/doi/1"),
+                        [],
+                    )
 
     async def test_image_resolves_to_file_artifact(self) -> None:
         with patch.object(
