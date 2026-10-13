@@ -19,11 +19,16 @@ class Provider(Protocol):
 
 def build_providers() -> list[Provider]:
     from providers.direct.provider import DirectProvider
+    from providers.instagram.provider import build_instagram_provider
     from providers.reddit.provider import build_reddit_provider
     from providers.youtube.provider import build_youtube_provider
 
     providers: list[Provider] = []
-    for factory in (build_reddit_provider, build_youtube_provider):
+    for factory in (
+        build_reddit_provider,
+        build_youtube_provider,
+        build_instagram_provider,
+    ):
         provider = factory()
         if provider is None:
             continue
