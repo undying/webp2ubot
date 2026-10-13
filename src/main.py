@@ -38,8 +38,15 @@ def url_find(message: Message) -> list[str]:
 
 def failure_reason(exc: Exception) -> str:
     text = str(exc)
-    if "Sign in to confirm" in text or "cookies" in text.lower():
-        return "YouTube просит авторизацию, нужна свежая кука."
+    lowered = text.lower()
+    if (
+        "Sign in to confirm" in text
+        or "login required" in lowered
+        or "cookies" in lowered
+    ):
+        return "Сайт просит авторизацию, нужна свежая кука."
+    if "rate-limit reached" in lowered or "please wait a few minutes" in lowered:
+        return "Сайт просит подождать, слишком много запросов."
     if "Private video" in text or "members-only" in text:
         return "Видео приватное."
     if "unavailable" in text.lower():

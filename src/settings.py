@@ -8,6 +8,9 @@ REDDIT_DEFAULT_USER_AGENT = (
 YOUTUBE_DEFAULT_MAX_DURATION_SEC = 600
 YOUTUBE_DEFAULT_MAX_FILESIZE_MB = 48
 YOUTUBE_DEFAULT_COOKIES_FILE = "secrets/youtube_cookies.txt"
+INSTAGRAM_DEFAULT_MAX_DURATION_SEC = 600
+INSTAGRAM_DEFAULT_MAX_FILESIZE_MB = 48
+INSTAGRAM_DEFAULT_COOKIES_FILE = "secrets/instagram_cookies.txt"
 
 
 def get_reddit_user_agent() -> str:
@@ -48,6 +51,36 @@ def get_youtube_cookies_file() -> str:
     return os.getenv(
         "YOUTUBE_COOKIES_FILE",
         YOUTUBE_DEFAULT_COOKIES_FILE,
+    )
+
+
+def get_instagram_max_duration_sec() -> int:
+    return _get_int(
+        "INSTAGRAM_MAX_DURATION_SEC",
+        INSTAGRAM_DEFAULT_MAX_DURATION_SEC,
+    )
+
+
+def get_instagram_max_filesize_bytes() -> int:
+    max_mb = _get_int(
+        "INSTAGRAM_MAX_FILESIZE_MB",
+        INSTAGRAM_DEFAULT_MAX_FILESIZE_MB,
+    )
+    return max_mb * 1024 * 1024
+
+
+def get_instagram_cookie() -> str | None:
+    """Raw Cookie header copied from the browser."""
+
+    return os.getenv("INSTAGRAM_COOKIE", "").strip() or None
+
+
+def get_instagram_cookies_file() -> str:
+    """Netscape file yt-dlp reads; generated from INSTAGRAM_COOKIE."""
+
+    return os.getenv(
+        "INSTAGRAM_COOKIES_FILE",
+        INSTAGRAM_DEFAULT_COOKIES_FILE,
     )
 
 
