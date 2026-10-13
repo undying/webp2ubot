@@ -221,7 +221,7 @@ class InstagramResolver:
 
         with guarded_cookies(self.cookies_file):
             with YoutubeDL(self._ydl_options(None)) as ydl:
-                info = ydl.extract_info(url, download=False)
+                info = ydl.extract_info(url, download=False, process=False)
         if not isinstance(info, dict):
             return None
         return info

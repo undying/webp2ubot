@@ -3,7 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -194,6 +194,20 @@ class InstagramResolverTests(unittest.IsolatedAsyncioTestCase):
                 await self.resolver.resolve(POST_URL)
 
         self.assertFalse(os.path.isdir(self.download_dir))
+
+    def test_extract_info_skips_yt_dlp_processing(self) -> None:
+        ydl = MagicMock()
+        ydl.__enter__ = MagicMock(return_value=ydl)
+        ydl.__exit__ = MagicMock(return_value=False)
+        ydl.extract_info.return_value = {"id": "x"}
+
+        with patch("yt_dlp.YoutubeDL", return_value=ydl):
+            self.resolver._extract_info(POST_URL)
+
+        self.assertEqual(
+            ydl.extract_info.call_args.kwargs,
+            {"download": False, "process": False},
+        )
 
     async def test_ignores_non_media_url(self) -> None:
         artifacts = await self.resolver.resolve(
