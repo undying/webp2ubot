@@ -1,7 +1,8 @@
+import os
 import unittest
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -29,21 +30,45 @@ class HandleUrlTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.message = AsyncMock()
         self.message.message_id = 42
+        self.bot = AsyncMock()
+        self.message.get_bot = MagicMock(return_value=self.bot)
         self.sender = AsyncMock()
 
-    async def test_replies_when_provider_raises(self) -> None:
+    async def test_stays_silent_when_provider_raises(self) -> None:
         provider = _Provider(
             "youtube",
             True,
             error=RuntimeError("Sign in to confirm you're not a bot"),
         )
-        await handle_url(self.message, [provider], self.sender, "u")
+        with patch.dict(os.environ, {"ADMIN_CHAT_ID": "7"}):
+            await handle_url(self.message, [provider], self.sender, "u")
 
-        self.message.reply_text.assert_awaited_once()
-        args, kwargs = self.message.reply_text.await_args
-        self.assertIn("кука", args[0])
-        self.assertEqual(kwargs["reply_to_message_id"], 42)
+        self.message.reply_text.assert_not_awaited()
         self.sender.send.assert_not_awaited()
+
+    async def test_provider_failure_reaches_the_admin(self) -> None:
+        provider = _Provider(
+            "youtube",
+            True,
+            error=RuntimeError("Sign in to confirm you're not a bot"),
+        )
+        bot = self.bot
+        with patch.dict(os.environ, {"ADMIN_CHAT_ID": "7"}):
+            await handle_url(self.message, [provider], self.sender, "u")
+
+        bot.send_message.assert_awaited_once()
+        kwargs = bot.send_message.await_args.kwargs
+        self.assertEqual(kwargs["chat_id"], 7)
+        self.assertIn("кука", kwargs["text"])
+        self.assertIn("youtube", kwargs["text"])
+
+    async def test_nothing_is_sent_without_an_admin(self) -> None:
+        provider = _Provider("youtube", True, error=RuntimeError("boom"))
+        bot = self.bot
+        with patch.dict(os.environ, {"ADMIN_CHAT_ID": ""}):
+            await handle_url(self.message, [provider], self.sender, "u")
+
+        bot.send_message.assert_not_awaited()
 
     async def test_stays_silent_when_nothing_resolved(self) -> None:
         provider = _Provider("direct", True, result=[])
